@@ -1,9 +1,22 @@
 ---
 name: openclaw-to-hermes-migration
-description: Полная миграция с OpenClaw на Hermes Agent — удаление OpenClaw с сохранением всех данных и ботов, установка Hermes, настройка Telegram и DeepSeek.
-version: 1.1.0
+description: Полная миграция с OpenClaw на Hermes Agent. Отправь скилл боту Hermes в Telegram и скажи "выполни миграцию" — бот сделает всё сам.
+version: 1.4.0
 author: Рамирес / Pixel Bot
 platforms: [linux]
+agent_trigger: |
+  Когда пользователь пишет "выполни миграцию", "мигрируй с OpenClaw", "перенеси с OpenClaw на Hermes":
+  1. Прочитай этот скилл полностью
+  2. Выполняй шаги 1-3 по порядку через терминал
+  3. Шаг 3 — САМЫЙ ВАЖНЫЙ: полный бэкап ВСЕХ данных
+  4. После бэкапа — ОБЯЗАТЕЛЬНО сообщи пользователю:
+     - Что сохранено (список файлов)
+     - Где лежит полный архив (/root/openclaw-full-backup.tar.gz)
+     - Размер архива
+     - И попроси ПОДТВЕРЖДЕНИЕ: "Всё сохранено. Удаляем OpenClaw?"
+  5. ТОЛЬКО после подтверждения — шаги 4-8 (удаление и перенос)
+  6. После каждого шага докладывай результат
+  7. В конце — итоговая сводка
 ---
 
 # Миграция OpenClaw → Hermes Agent
@@ -58,7 +71,50 @@ EOF
 ### 3. Сохранение ВСЕХ данных и скиллов
 
 ```bash
-# === ШАГ 3.1: Сохраняем workspace ===
+# === ШАГ 3.0: ПОЛНЫЙ БЭКАП (КРИТИЧЕСКИ — ДЕЛАЕТСЯ ПЕРВЫМ!) ===
+echo "📦 Создаю полный бэкап /root/.openclaw/..."
+
+# Полный архив всего OpenClaw
+tar -czf /root/openclaw-full-backup-$(date +%Y%m%d_%H%M%S).tar.gz \
+    -C /root .openclaw 2>/dev/null
+
+BACKUP_FILE=$(ls -t /root/openclaw-full-backup-*.tar.gz | head -1)
+BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+
+echo "✅ Полный бэкап: $BACKUP_FILE ($BACKUP_SIZE)"
+
+# Лёгкий бэкап только критичных файлов (можно отправить в Telegram <50MB)
+mkdir -p /tmp/openclaw-lite-backup
+cp /root/.openclaw/openclaw.json /tmp/openclaw-lite-backup/ 2>/dev/null
+cp -r /root/.openclaw/credentials /tmp/openclaw-lite-backup/ 2>/dev/null
+cp -r /root/.openclaw/plugin-skills /tmp/openclaw-lite-backup/ 2>/dev/null
+cp -r /root/.openclaw/skill-workshop /tmp/openclaw-lite-backup/ 2>/dev/null
+cp -r /root/.openclaw/memory /tmp/openclaw-lite-backup/ 2>/dev/null
+find /root/.openclaw -name ".env" -not -path "*/.venv/*" | while read f; do
+    cp "$f" /tmp/openclaw-lite-backup/ 2>/dev/null
+done
+tar -czf /root/openclaw-lite-backup.tar.gz -C /tmp openclaw-lite-backup 2>/dev/null
+LITE_SIZE=$(du -h /root/openclaw-lite-backup.tar.gz | cut -f1)
+rm -rf /tmp/openclaw-lite-backup
+
+echo "✅ Лёгкий бэкап: /root/openclaw-lite-backup.tar.gz ($LITE_SIZE)"
+
+# === ОБЯЗАТЕЛЬНО! Сообщи пользователю и жди подтверждения ===
+echo ""
+echo "========================================="
+echo "  📦 Бэкап готов:"
+echo "  Полный: $BACKUP_FILE ($BACKUP_SIZE)"
+echo "  Лёгкий: /root/openclaw-lite-backup.tar.gz ($LITE_SIZE)"
+echo "========================================="
+echo ""
+echo "  ВСЕ данные сохранены. Можно удалять OpenClaw."
+echo "  Подтверждаешь? (да/нет)"
+```
+
+**⚠️ СТОП!** После вывода выше — жди подтверждения пользователя. Без него не продолжай!
+
+```bash
+# === ШАГ 3.1: Сохраняем workspace (после подтверждения) ===
 cp -r /root/.openclaw/workspace /root/pixel-workspace
 echo "✅ Workspace сохранён"
 
